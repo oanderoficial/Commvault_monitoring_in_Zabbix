@@ -1,0 +1,25 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 5d3fafae11c44f18838073cdf8771c5d
+      name: 'Templates'
+  templates:
+    - uuid: a59f62c6079842918d72808ba390f288
+      template: 'Template Backup Commvault - Janela'
+      name: 'Template Backup Commvault - Janela'
+      groups:
+        - name: 'Templates'
+      discovery_rules:
+        - uuid: 27fd9edf7634439bbb3001383a133e06
+          name: 'Commvault - Discovery clients visíveis'
+          key: commvault.jobs.discovery
+          item_prototypes:
+            - uuid: 839c350df734437ea28d8815bcdd750c
+              name: 'Commvault - Jobs running fora do horário em {#CLIENT}'
+              key: 'commvault.jobs.running.client[{#CLIENT}]'
+              delay: 60s
+              trigger_prototypes:
+                - uuid: 1f6870f6c28a4904ae971417f5d95f59
+                  expression: 'last(/Template Backup Commvault - Janela/commvault.jobs.running.client[{#CLIENT}])>0'
+                  name: 'Commvault: Job rodando fora da janela (18:00–05:45) em {#CLIENT}'
+                  priority: HIGH
