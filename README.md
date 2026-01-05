@@ -725,3 +725,24 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
+## 4) Configuração do Zabbix Agent2 (UserParameters)
+
+Criar/editar:
+
+<strong>/etc/zabbix/zabbix_agent2.d/commvault.conf</strong>
+
+```ini
+UserParameter=commvault.jobs.discovery,/usr/bin/python3 /opt/zabbix/scripts/commvault/commvault_jobs_by_client.py --discover
+UserParameter=commvault.jobs.running.client[*],/usr/bin/python3 /opt/zabbix/scripts/commvault/commvault_jobs_by_client.py --client "$1" --allowed-window 18:00-05:45
+```
+Reinicie:
+
+```bash
+systemctl restart zabbix-agent2
+```
+Teste:
+
+```bash
+zabbix_agent2 -t commvault.jobs.running.client["CLIENT-EXEMPLO"]
+```
