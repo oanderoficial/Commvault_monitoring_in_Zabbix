@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Monitorar se existem jobs de backup em execução (status=Running) fora da janela permitida <strong> 00:00–05:45 </strong>  e gerar alerta no Zabbix informando qual client está executando fora do horário.
+Monitorar se existem jobs de backup em execução (status=Running) fora da janela permitida <strong> 18:00-05:45 </strong>  e gerar alerta no Zabbix informando qual client está executando fora do horário.
 
 ## 1) Pré-requisitos
 
@@ -65,4 +65,10 @@ Criar /opt/zabbix/scripts/commvault/tokens.json:
   "accessToken": "<ACCESS_TOKEN>",
   "refreshToken": "<REFRESH_TOKEN>"
 }
+```
+Permissões:
+
+```bash
+chown zabbix:zabbix /opt/zabbix/scripts/commvault/tokens.json
+chmod 600 /opt/zabbix/scripts/commvault/tokens.json
 ```
