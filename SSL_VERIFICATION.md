@@ -112,5 +112,43 @@ Depois, no script Python, use:
 <strong> verify="/opt/zabbix/scripts/commvault/commvault-chain.crt" </strong>
 - em vez de verify=False.
 
+## Caso precisar remover a CA do Sistema siga esses passos: 
+
+### Ubuntu / Debian
+
+```bash
+sudo rm -f /usr/local/share/ca-certificates/commvault-chain.crt
+```
+
+<strong>2) Regerar o trust store</strong>
+
+```bash
+sudo update-ca-certificates --fresh
+```
+
+<strong>3) Validar que saiu </strong>
+
+```bash
+grep -R "commvault-chain" -n /etc/ssl/certs 2>/dev/null || echo "OK: não encontrado"
+```
+
+### RHEL / CentOS / Rocky / Alma
+
+
+```bash
+sudo rm -f /etc/pki/ca-trust/source/anchors/commvault-chain.crt
+```
+
+<strong>2) Regerar o trust store</strong>
+
+```bash
+sudo update-ca-trust extract
+```
+<strong>3) Validar que saiu </strong>
+
+```bash
+sudo trust list | grep -i commvault || echo "OK: não encontrado"
+```
+
 
 
