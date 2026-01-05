@@ -803,3 +803,36 @@ last(/<TEMPLATE_NAME>/commvault.jobs.running.client[{#CLIENT}])>0
 ```
 
 Resultado: o alerta sempre informa qual client está fora do horário via {#CLIENT}.
+
+## 6) Operação e validação
+
+<strong> 6.1 Validação funcional </strong>
+
+1. Iniciar um job manual fora da janela permitida (teste controlado)
+2. Verificar em Monitoring → Latest data se o item do client retorna >0
+3. Confirmar a trigger em Monitoring → Problems
+
+<strong>6.2 Comportamento esperado</strong>
+
+- Dentro da janela (18:00–05:45): sempre retorna 0 (não alerta)
+- Fora da janela:
+  - sem job: 0
+  - com job Running: >0 (alerta)
+ 
+## 7) Troubleshooting (principais causas)
+
+<strong>7.1 “Token reuse detected… token purged” </strong>
+ 
+Causa: mesmo token usado em mais de um local/ambiente.
+Ação:
+
+- gerar token novo e usar apenas em um collector
+- conferir se não há cópias do tokens.json em outros hosts
+
+<strong>7.2 401/403 “Access denied”</strong>
+
+Causa: falha de auth/API.
+Ação:
+
+- checar logs do Zabbix agent2 e o Audit Trail do Commvault
+- renovar/gerar novo token
