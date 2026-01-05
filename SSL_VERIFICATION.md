@@ -95,3 +95,22 @@ PY
 ```
 
 Esperado: HTTP 200.
+
+## Alternativa (sem mexer no sistema): usar o bundle diretamente no script
+
+Se você não quiser instalar CA no sistema, você pode usar o arquivo como CA bundle:
+
+```bash
+cd /opt/zabbix/scripts/commvault
+cp commvault-chain.pem commvault-chain.crt
+sudo chown zabbix:zabbix commvault-chain.crt
+sudo chmod 644 commvault-chain.crt
+```
+
+Depois, no script Python, use:
+
+<strong> verify="/opt/zabbix/scripts/commvault/commvault-chain.crt" </strong>
+- em vez de verify=False.
+
+
+
