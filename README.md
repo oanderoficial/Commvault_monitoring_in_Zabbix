@@ -760,3 +760,46 @@ Com 18:00–05:45:
 
 
 ## 5) Template no Zabbix (LLD + itens + triggers)
+
+<strong> 5.1 Link do template </strong> 
+
+O template deve ser vinculado ao host coletor (onde roda o agent2 + scripts).
+
+Caminho:
+<strong> Configuration → Hosts → (host coletor) → Templates → Link new templates </strong> 
+
+<strong> 5.2 Discovery Rule (LLD) </strong> 
+
+No template:
+<strong> Discovery rules → Create discovery rule </strong> 
+
+- Name: Commvault - Discovery clients visíveis
+- Type: Zabbix agent
+- Key: commvault.jobs.discovery
+- Update interval: 1h
+
+<strong>5.3 Item Prototype </strong>
+
+Dentro da discovery rule:
+<strong> Item prototypes → Create item prototype </strong>
+
+- Name: Commvault - Jobs running fora do horário em {#CLIENT}
+- Type: Zabbix agent
+- Key: commvault.jobs.running.client[{#CLIENT}]
+- Type of information: Numeric (unsigned)
+- Update interval: 60s
+
+<strong> 5.4 Trigger Prototype </strong> 
+
+Dentro da discovery rule:
+<strong> Trigger prototypes → Create trigger prototype </strong> 
+
+- Name: Commvault: Job rodando fora da janela (00:00–05:45) em {#CLIENT}
+- Severity: High (ou conforme política)
+- Expression:
+
+```perl
+last(/<TEMPLATE_NAME>/commvault.jobs.running.client[{#CLIENT}])>0
+```
+
+Resultado: o alerta sempre informa qual client está fora do horário via {#CLIENT}.
