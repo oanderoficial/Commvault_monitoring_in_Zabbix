@@ -741,8 +741,22 @@ Reinicie:
 ```bash
 systemctl restart zabbix-agent2
 ```
-Teste:
+Testes:
 
 ```bash
+zabbix_agent2 -t commvault.jobs.discovery
 zabbix_agent2 -t commvault.jobs.running.client["CLIENT-EXEMPLO"]
 ```
+
+<strong> Comportamento </strong> 
+
+Com 18:00–05:45:
+
+- entre 18:00 e 23:59 → permitido (retorna 0)
+
+- entre 00:00 e 05:45 → permitido (retorna 0)
+
+- entre 05:46 e 17:59 → fora do permitido → se tiver job Running, retorna >0 e alerta
+
+
+## 5) Template no Zabbix (LLD + itens + triggers)
