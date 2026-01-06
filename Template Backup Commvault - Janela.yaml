@@ -9,6 +9,21 @@ zabbix_export:
       name: 'Template Backup Commvault - Janela'
       groups:
         - name: 'Templates'
+      items:
+        - uuid: fbb80731332343a0a0774ca0728f4cad
+          name: 'Commvault - Jobs FAILED últimas 24h'
+          key: commvault.jobs.failed24h.json
+          delay: 1h
+          history: 7d
+          value_type: TEXT
+          trends: '0'
+        - uuid: ae555dcc8f84429b8527f3f21fdcb472
+          name: 'Commvault - Jobs últimas 24h'
+          key: commvault.jobs.history24h.json
+          delay: 1h
+          history: 7d
+          value_type: TEXT
+          trends: '0'
       discovery_rules:
         - uuid: 27fd9edf7634439bbb3001383a133e06
           name: 'Commvault - Discovery clients visíveis'
