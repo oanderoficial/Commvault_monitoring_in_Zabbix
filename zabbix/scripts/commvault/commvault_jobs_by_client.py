@@ -17,7 +17,7 @@ TOKENS_PATH = os.path.join(BASE_DIR, "tokens.json")
 POLICIES_PATH = os.path.join(BASE_DIR, "policies.json")
 RENEW_LOCK_PATH = "/tmp/commvault_token_renew.lock"
 
-# Status "ativos" (fallback caso endpoint status=Running não esteja disponível)
+# Status "ativos" (fallback caso endpoint filtrado não funcione)
 ACTIVE_STATUS = {
     "running", "waiting", "pending", "queued", "active",
     "preparing", "starting", "in progress", "inprogress", "suspended"
@@ -359,33 +359,56 @@ def get_clients_visible(host: str, access: str, verify_param):
     return seen, r
 
 
-def get_jobs_running(host: str, access: str, verify_param, limit: int):
+def get_jobs_payload(host: str, access: str, verify_param, limit: int):
     """
-    Tenta endpoint filtrado por status=Running.
-    Se der 400/404, faz fallback sem filtro e filtra localmente.
+    Busca jobs preferindo filtros "ativos" por query.
+    Retorna (jobs_ativos_filtrados_localmente, resp, path_usado).
+    Observação: mesmo quando a API não filtra, SEMPRE filtramos localmente com job_is_active().
     """
-    # 1) Preferido
-    r = api_get(host, access, f"/commandcenter/api/Job?status=Running&limit={limit}", verify_param)
-    if r.status_code == 200:
-        return collect_jobs(r.json()), r
+    paths = [
+        f"/commandcenter/api/Job?jobCategory=Active&limit={limit}",
+        f"/commandcenter/api/Job?jobCategory=ACTIVE&limit={limit}",
+        f"/commandcenter/api/Job?status=Running&limit={limit}",
+        f"/commandcenter/api/Job?status=Active&limit={limit}",
+        f"/commandcenter/api/Job?status=running&limit={limit}",
+        f"/commandcenter/api/Job?limit={limit}",
+    ]
 
-    # 2) Se parâmetro não suportado, fallback
-    if r.status_code in (400, 404):
-        r2 = api_get(host, access, f"/commandcenter/api/Job?limit={limit}", verify_param)
-        if r2.status_code == 200:
-            jobs = collect_jobs(r2.json())
-            # filtra por heurística
-            jobs = [j for j in jobs if job_is_active(j)]
-            return jobs, r2
-        return None, r2
+    last = None
+    for path in paths:
+        r = api_get(host, access, path, verify_param)
+        last = (path, r)
 
-    return None, r
+        if r.status_code == 200:
+            try:
+                jobs = collect_jobs(r.json())
+            except Exception:
+                return None, r, path
+
+            # SEMPRE filtra localmente
+            jobs_active = [j for j in jobs if job_is_active(j)]
+            return jobs_active, r, path
+
+        # parâmetros não suportados -> tenta próximo
+        if r.status_code in (400, 404):
+            continue
+
+        # auth/RBAC -> deixa caller tratar renew
+        if r.status_code in (401, 403):
+            return None, r, path
+
+        # outros erros: devolve
+        return None, r, path
+
+    if last:
+        return None, last[1], last[0]
+    return None, None, ""
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--discover", action="store_true", help="Retorna JSON LLD com clients visíveis")
-    ap.add_argument("--client", default=None, help="Nome do client para contagem de jobs Running fora da janela")
+    ap.add_argument("--client", default=None, help="Nome do client para contagem de jobs ativos fora da janela")
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--debug", action="store_true")
 
@@ -467,7 +490,7 @@ def main():
         print("0")
         return
 
-    jobs, resp = get_jobs_running(host, access, verify_param, args.limit)
+    jobs, resp, path_used = get_jobs_payload(host, access, verify_param, args.limit)
 
     # token inválido/expirado -> tenta renew (com lock)
     if resp is not None and resp.status_code in (401, 403):
@@ -479,7 +502,13 @@ def main():
             print("0")
             return
 
-        jobs, resp = get_jobs_running(host, access, verify_param, args.limit)
+        jobs, resp, path_used = get_jobs_payload(host, access, verify_param, args.limit)
+
+    if args.debug:
+        if path_used:
+            eprint(f"url_used={host}{path_used}")
+        if resp is not None:
+            eprint(f"http={resp.status_code}")
 
     if resp is None or resp.status_code != 200 or jobs is None:
         if resp is not None:
@@ -487,15 +516,13 @@ def main():
         print("0")
         return
 
-    # Conta jobs deste client
+    # Conta jobs ativos deste client (jobs já vem filtrado por job_is_active)
     target = client_name.lower()
     cnt = 0
     for j in jobs:
         dc = j.get("destClientName")
         if isinstance(dc, str) and dc.strip().lower() == target:
-            # se veio de status=Running, já é running; se fallback, garante heurística
-            if job_is_active(j):
-                cnt += 1
+            cnt += 1
 
     print(str(cnt))
 
