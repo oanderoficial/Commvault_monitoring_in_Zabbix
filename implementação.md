@@ -121,7 +121,7 @@ Colocar em <strong> /opt/zabbix/scripts/commvault/: </strong>
 - Coloque também:
    - <strong> commvault_jobs.py </strong> (contagem geral)
    - <strong> commvault_visible_clients.py </strong> (validação de RBAC / lista de clients)
-   - <strong> commvault_job_history.py </strong> (listar o historico de jobs)
+   - <strong> commvault_job_history.py </strong> (listar o histórico de jobs)
  
   
 <strong> commvault_jobs_by_client.py </strong> 
@@ -1522,7 +1522,7 @@ last(/<TEMPLATE_NAME>/commvault.jobs.running.client[{#CLIENT}])>0
 
 Resultado: o alerta sempre informa qual client está fora do horário via {#CLIENT}.
 
-### Itens Jobs últimas 24h e Jobs FAILED últimas 24h
+### Itens Jobs últimas 24h e Jobs FAILED 
 
 Item 1 — Jobs últimas 24h
 - Type: Zabbix agent (ou agent active, conforme seu padrão)
