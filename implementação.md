@@ -714,6 +714,10 @@ if __name__ == "__main__":
 ```python
 BACKUP_OPTYPES = {59, OUTRO_OPTYPE_AQUI}
 ```
+<strong> Referência Oficial </strong>
+
+link: https://documentation.commvault.com/v11/commcell-console/jobfilter_parameter_values.html
+
 
 <strong> commvault_jobs.py </strong>
 
