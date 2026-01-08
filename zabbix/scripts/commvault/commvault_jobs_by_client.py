@@ -27,6 +27,13 @@ FINAL_STATUS = {
     "killed", "canceled", "cancelled", "skipped", "success"
 }
 
+# ---- Job type filtering (simplificado) ----
+# Pelo seu JSON:
+# - Restore:  opType=5,  jobType="Restore", localizedOperationName="Restore"
+# - Backup:   opType=59, jobType="Snap Backup", localizedOperationName="Snap Backup"
+RESTORE_OPTYPES = {5}
+BACKUP_OPTYPES = {4, 59}
+
 DOW = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]  # 0=mon .. 6=sun
 
 
@@ -252,7 +259,6 @@ def with_renew_lock(func):
         try:
             import fcntl  # Linux/Unix
         except Exception:
-            # Sem lock, executa direto
             return func(*args, **kwargs)
 
         fd = None
@@ -339,6 +345,44 @@ def job_is_active(job: dict) -> bool:
     return False
 
 
+def job_type_blob(job: dict) -> str:
+    jt = (job.get("jobType") or "").strip()
+    lop = (job.get("localizedOperationName") or "").strip()
+    op = job.get("opType")
+    return f"jobType={jt} localizedOperationName={lop} opType={op}"
+
+
+def job_is_restore(job: dict) -> bool:
+    op = job.get("opType")
+    if isinstance(op, int) and op in RESTORE_OPTYPES:
+        return True
+
+    jt = (job.get("jobType") or "").strip().lower()
+    if jt == "restore":
+        return True
+
+    lop = (job.get("localizedOperationName") or "").strip().lower()
+    if lop == "restore":
+        return True
+
+    return False
+
+
+def job_is_backup_only(job: dict) -> bool:
+    # Nunca contar restore
+    if job_is_restore(job):
+        return False
+
+    op = job.get("opType")
+    if isinstance(op, int) and op in BACKUP_OPTYPES:
+        return True
+
+    # Fallback: conta qualquer operação com "backup"
+    jt = (job.get("jobType") or "").strip().lower()
+    lop = (job.get("localizedOperationName") or "").strip().lower()
+    return ("backup" in jt) or ("backup" in lop)
+
+
 def get_clients_visible(host: str, access: str, verify_param):
     """
     Retorna dict clientId(str) -> displayName(str)
@@ -366,6 +410,13 @@ def get_jobs_payload(host: str, access: str, verify_param, limit: int):
     Observação: mesmo quando a API não filtra, SEMPRE filtramos localmente com job_is_active().
     """
     paths = [
+        # Preferência: pedir só BACKUP direto na API (quando suportado)
+        f"/commandcenter/api/Job?jobCategory=Active&jobFilter=backup&limit={limit}",
+        f"/commandcenter/api/Job?jobCategory=ACTIVE&jobFilter=backup&limit={limit}",
+        f"/commandcenter/api/Job?status=Running&jobFilter=backup&limit={limit}",
+        f"/commandcenter/api/Job?status=Active&jobFilter=backup&limit={limit}",
+
+        # Fallbacks (sem jobFilter)
         f"/commandcenter/api/Job?jobCategory=Active&limit={limit}",
         f"/commandcenter/api/Job?jobCategory=ACTIVE&limit={limit}",
         f"/commandcenter/api/Job?status=Running&limit={limit}",
@@ -385,19 +436,15 @@ def get_jobs_payload(host: str, access: str, verify_param, limit: int):
             except Exception:
                 return None, r, path
 
-            # SEMPRE filtra localmente
             jobs_active = [j for j in jobs if job_is_active(j)]
             return jobs_active, r, path
 
-        # parâmetros não suportados -> tenta próximo
         if r.status_code in (400, 404):
             continue
 
-        # auth/RBAC -> deixa caller tratar renew
         if r.status_code in (401, 403):
             return None, r, path
 
-        # outros erros: devolve
         return None, r, path
 
     if last:
@@ -412,19 +459,15 @@ def main():
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--debug", action="store_true")
 
-    # Compatibilidade: se você quiser forçar uma janela fixa via linha de comando
     ap.add_argument("--allowed-window", default=None, help="Fallback HH:MM-HH:MM (se não houver policy). Ex.: 18:00-05:45")
 
-    # SSL/TLS
     ap.add_argument("--verify-tls", action="store_true", help="Força verify=True (usa trust store do sistema)")
     ap.add_argument("--ca-bundle", default=None, help="Caminho para CA bundle .crt/.pem (verify=<path>)")
 
     args = ap.parse_args()
 
-    # Defaults
     fallback_window = args.allowed_window.strip() if isinstance(args.allowed_window, str) and args.allowed_window.strip() else "18:00-05:45"
 
-    # Lê tokens/policies
     try:
         tokens = load_tokens(TOKENS_PATH)
     except Exception as ex:
@@ -446,7 +489,6 @@ def main():
     if args.discover:
         clients, resp = get_clients_visible(host, access, verify_param)
 
-        # token inválido/expirado -> tenta renew (com lock)
         if resp is not None and resp.status_code in (401, 403):
             try:
                 new_a, new_r = safe_renew_and_update(tokens, verify_param)
@@ -492,7 +534,6 @@ def main():
 
     jobs, resp, path_used = get_jobs_payload(host, access, verify_param, args.limit)
 
-    # token inválido/expirado -> tenta renew (com lock)
     if resp is not None and resp.status_code in (401, 403):
         try:
             new_a, new_r = safe_renew_and_update(tokens, verify_param)
@@ -519,7 +560,15 @@ def main():
     # Conta jobs ativos deste client (jobs já vem filtrado por job_is_active)
     target = client_name.lower()
     cnt = 0
+
     for j in jobs:
+        # Filtra somente BACKUP (ignora Restore)
+        if not job_is_backup_only(j):
+            if args.debug and job_is_restore(j):
+                eprint(f"[skip] jobId={j.get('jobId')} type={job_type_blob(j)}")
+            continue
+
+        # Seu payload usa destClientName em minúsculo (ex.: s154fsbc0001)
         dc = j.get("destClientName")
         if isinstance(dc, str) and dc.strip().lower() == target:
             cnt += 1
