@@ -29,7 +29,7 @@ Monitorar se existem jobs de backup em execução (status=Running) fora da janel
 - Se necessário:
 - ```pip3 install requests```
 
-## 2) Criação do token no Commvault (produção)
+## 2) Criação dos tokens no Commvault (produção)
 
 No Command Center:
 
@@ -44,6 +44,7 @@ No Command Center:
 - Refresh token
 
 5. Definir nome claro (ex.: zabbix-prod-collector-<hostname>) e descrição “Integração Zabbix”.
+6. Siga os mesmos passos e crie um segundo token, para ser utilizado em 'tokens_history.json'. 
 
 ## 3) Implementação no host coletor
 
@@ -55,7 +56,7 @@ chown -R zabbix:zabbix /opt/zabbix/scripts/commvault
 chmod 755 /opt/zabbix/scripts/commvault
 ```
 
-<strong>3.2 Arquivo tokens.json </strong>
+<strong>3.2 Arquivo tokens.json e tokens_history.json  </strong>
 
 Criar /opt/zabbix/scripts/commvault/tokens.json:
 
@@ -66,11 +67,16 @@ Criar /opt/zabbix/scripts/commvault/tokens.json:
   "refreshToken": "<REFRESH_TOKEN>"
 }
 ```
+Crie também o tokens_history.json no mesmo diretório com a mesma estrutura json, porém adicione o segundo token que criamos anteriormente.
+
 Permissões:
 
 ```bash
 chown zabbix:zabbix /opt/zabbix/scripts/commvault/tokens.json
 chmod 600 /opt/zabbix/scripts/commvault/tokens.json
+
+chown zabbix:zabbix /opt/zabbix/scripts/commvault/tokens_history.json
+chmod 600 /opt/zabbix/scripts/commvault/tokens_history.json
 ```
 
 <strong> 3.3 Criar o arquivo policies.json </strong> 
