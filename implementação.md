@@ -110,6 +110,11 @@ Permissões recomendadas:
 ```bash
 sudo chown zabbix:zabbix /opt/zabbix/scripts/commvault/policies.json
 sudo chmod 644 /opt/zabbix/scripts/commvault/policies.json
+
+chown -R zabbix:zabbix /opt/zabbix/scripts/commvault
+chmod 750 /opt/zabbix/scripts/commvault
+chmod 640 /opt/zabbix/scripts/commvault/tokens*.json
+
 ```
 
 <strong>3.4 Scripts utilizados </strong>
