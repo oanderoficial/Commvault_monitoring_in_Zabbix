@@ -15,7 +15,8 @@ requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 BASE_DIR = os.path.dirname(__file__)
 TOKENS_PATH = os.path.join(BASE_DIR, "tokens.json")
 POLICIES_PATH = os.path.join(BASE_DIR, "policies.json")
-RENEW_LOCK_PATH = "/tmp/commvault_token_renew.lock"
+#RENEW_LOCK_PATH = "/tmp/commvault_token_renew.lock"
+RENEW_LOCK_PATH = os.path.join(BASE_DIR, ".commvault_token_renew.lock")
 
 # Status "ativos" (fallback caso endpoint filtrado não funcione)
 ACTIVE_STATUS = {
