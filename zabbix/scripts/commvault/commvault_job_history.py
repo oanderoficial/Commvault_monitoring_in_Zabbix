@@ -6,15 +6,19 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 import requests
 from urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 BASE_DIR = os.path.dirname(__file__)
-TOKENS_PATH = os.path.join(BASE_DIR, "tokens.json")
-RENEW_LOCK_PATH = "/tmp/commvault_token_renew.lock"
+
+# >>> AJUSTE PRINCIPAL: arquivo separado para evitar corrida com outros scripts
+DEFAULT_TOKENS_PATH = os.path.join(BASE_DIR, "tokens_history.json")
+
+# >>> AJUSTE PRINCIPAL: lock separado e fora do /tmp (evita permission denied / owner root)
+DEFAULT_RENEW_LOCK_PATH = os.path.join(BASE_DIR, ".commvault_token_renew_history.lock")
 
 FINAL_STATUS = {
     "completed", "completed w/ errors", "completed with errors", "failed",
@@ -34,9 +38,11 @@ def eprint(msg: str):
 def load_tokens(path: str) -> dict:
     with open(path, "r") as f:
         t = json.load(f)
+
     for k in ("host", "accessToken", "refreshToken"):
         if not isinstance(t.get(k), str) or not t[k].strip():
-            raise ValueError(f"tokens.json inválido: faltando '{k}'")
+            raise ValueError(f"{os.path.basename(path)} inválido: faltando '{k}'")
+
     t["host"] = t["host"].rstrip("/")
     return t
 
@@ -138,39 +144,33 @@ def renew_tokens(host: str, access: str, refresh: str, verify_param):
     raise RuntimeError(f"Falha ao renovar token. Último erro: {last_err}")
 
 
-def with_renew_lock(func):
-    def wrapper(*args, **kwargs):
-        try:
-            import fcntl
-        except Exception:
-            return func(*args, **kwargs)
-
-        fd = None
-        try:
-            fd = open(RENEW_LOCK_PATH, "w")
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            return func(*args, **kwargs)
-        finally:
+def with_renew_lock(lock_path: str):
+    """
+    Decorator com lockfile parametrizável (evita competição com outros scripts).
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
             try:
-                if fd:
-                    import fcntl
-                    fcntl.flock(fd, fcntl.LOCK_UN)
-                    fd.close()
+                import fcntl
             except Exception:
-                pass
-    return wrapper
+                return func(*args, **kwargs)
 
-
-@with_renew_lock
-def safe_renew_and_update(tokens: dict, verify_param):
-    host = tokens["host"]
-    access = tokens["accessToken"]
-    refresh = tokens["refreshToken"]
-    new_a, new_r = renew_tokens(host, access, refresh, verify_param)
-    tokens["accessToken"] = new_a
-    tokens["refreshToken"] = new_r
-    save_json_atomic(TOKENS_PATH, tokens)
-    return new_a, new_r
+            fd = None
+            try:
+                # 'a+' evita falha se arquivo já existir e preserva permissões do diretório
+                fd = open(lock_path, "a+")
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                return func(*args, **kwargs)
+            finally:
+                try:
+                    if fd:
+                        import fcntl
+                        fcntl.flock(fd, fcntl.LOCK_UN)
+                        fd.close()
+                except Exception:
+                    pass
+        return wrapper
+    return decorator
 
 
 def collect_jobs(obj):
@@ -207,10 +207,6 @@ def job_is_active(job: dict) -> bool:
 
 
 def parse_since(s: str) -> int:
-    """
-    Aceita: 24h, 7d, 30m
-    Retorna epoch seconds limite (agora - delta)
-    """
     s = s.strip().lower()
     if s.endswith("h"):
         n = int(s[:-1]); delta = n * 3600
@@ -234,7 +230,6 @@ def to_iso(epoch_s) -> str:
 
 
 def fetch_jobs(host: str, access: str, verify_param, limit: int, debug: bool):
-    # tenta ordenar (varia por versão). Se falhar, cai no básico.
     paths = [
         f"/commandcenter/api/Job?limit={limit}&orderBy=jobEndTime%20desc",
         f"/commandcenter/api/Job?limit={limit}&sort=jobEndTime:desc",
@@ -259,6 +254,10 @@ def fetch_jobs(host: str, access: str, verify_param, limit: int, debug: bool):
 
 def main():
     ap = argparse.ArgumentParser(description="Commvault Job History lister (Command Center API)")
+
+    ap.add_argument("--tokens-file", default=DEFAULT_TOKENS_PATH,
+                    help=f"Caminho do tokens JSON (default: {DEFAULT_TOKENS_PATH})")
+
     ap.add_argument("--limit", type=int, default=500, help="Qtde máxima de jobs trazidos da API")
     ap.add_argument("--since", default="24h", help="Período (ex.: 24h, 7d, 30m)")
     ap.add_argument("--client", default=None, help="Filtra por destClientName (ex.: S154FJDF0001)")
@@ -268,9 +267,13 @@ def main():
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--verify-tls", action="store_true")
     ap.add_argument("--ca-bundle", default=None)
+
     args = ap.parse_args()
 
-    tokens = load_tokens(TOKENS_PATH)
+    tokens_path = args.tokens_file
+    lock_path = DEFAULT_RENEW_LOCK_PATH
+
+    tokens = load_tokens(tokens_path)
     verify_param = build_verify_param(tokens, args.verify_tls, args.ca_bundle)
 
     host = tokens["host"]
@@ -278,12 +281,23 @@ def main():
 
     since_epoch = parse_since(args.since)
 
+    # Decorator runtime: lock dedicado ao history
+    @with_renew_lock(lock_path)
+    def safe_renew_and_update(tokens_local: dict, verify_param_local):
+        host_l = tokens_local["host"]
+        access_l = tokens_local["accessToken"]
+        refresh_l = tokens_local["refreshToken"]
+        new_a, new_r = renew_tokens(host_l, access_l, refresh_l, verify_param_local)
+        tokens_local["accessToken"] = new_a
+        tokens_local["refreshToken"] = new_r
+        save_json_atomic(tokens_path, tokens_local)
+        return new_a, new_r
+
     jobs, resp, path_used = fetch_jobs(host, access, verify_param, args.limit, args.debug)
 
-    # renew se precisar
     if resp is not None and resp.status_code in (401, 403):
         if args.debug:
-            eprint("[auth] 401/403 -> tentando renew")
+            eprint("[auth] 401/403 -> tentando renew (history)")
         new_a, _ = safe_renew_and_update(tokens, verify_param)
         access = new_a
         jobs, resp, path_used = fetch_jobs(host, access, verify_param, args.limit, args.debug)
@@ -292,13 +306,11 @@ def main():
         eprint(f"[erro] Falha ao buscar jobs: HTTP={None if resp is None else resp.status_code} path={path_used}")
         sys.exit(2)
 
-    # filtros locais
     out = []
     client_f = args.client.strip().lower() if args.client else None
     status_f = args.status.strip().lower() if args.status else None
 
     for j in jobs:
-        # período: usa endTime se existir, senão startTime, senão ignora
         jt = j.get("jobEndTime") or j.get("completedTime") or j.get("jobStartTime") or 0
         try:
             jt = int(jt)
@@ -323,7 +335,6 @@ def main():
         out.append(j)
 
     if args.json:
-        # reduz campos principais pra ficar legível
         slim = []
         for j in out:
             slim.append({
@@ -341,7 +352,6 @@ def main():
         print(json.dumps(slim, indent=2))
         return
 
-    # tabela simples
     print(f"BASE={host}")
     print(f"QUERY={host}{path_used}")
     print(f"since={args.since} ({to_iso(since_epoch)})  limit={args.limit}  matched={len(out)}")
