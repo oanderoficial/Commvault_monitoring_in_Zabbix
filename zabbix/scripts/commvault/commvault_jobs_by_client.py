@@ -16,7 +16,8 @@ BASE_DIR = os.path.dirname(__file__)
 TOKENS_PATH = os.path.join(BASE_DIR, "tokens.json")
 POLICIES_PATH = os.path.join(BASE_DIR, "policies.json")
 #RENEW_LOCK_PATH = "/tmp/commvault_token_renew.lock"
-RENEW_LOCK_PATH = os.path.join(BASE_DIR, ".commvault_token_renew.lock")
+#RENEW_LOCK_PATH = os.path.join(BASE_DIR, ".commvault_token_renew.lock")
+RENEW_LOCK_PATH = os.path.join(BASE_DIR, ".commvault_token_renew_jobs.lock")
 
 # Status "ativos" (fallback caso endpoint filtrado não funcione)
 ACTIVE_STATUS = {
@@ -264,7 +265,7 @@ def with_renew_lock(func):
 
         fd = None
         try:
-            fd = open(RENEW_LOCK_PATH, "w")
+            fd = open(RENEW_LOCK_PATH, "a+")
             fcntl.flock(fd, fcntl.LOCK_EX)
             return func(*args, **kwargs)
         finally:
@@ -579,3 +580,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
