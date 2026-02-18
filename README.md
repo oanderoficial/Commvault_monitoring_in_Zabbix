@@ -4,7 +4,7 @@ Este projeto monitora **jobs do Commvault (Command Center API)** e gera alerta n
 
 A solução usa:
 - **Python** + **Commvault Command Center API**
-- **Access Token + Refresh Token** (com renovação automática)
+- **Login + Refresh Token** (com renovação automática)
 - **Zabbix Agent2 UserParameter**
 - **Low-Level Discovery (LLD)** para criar itens/triggers por client
 
