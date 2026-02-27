@@ -268,7 +268,7 @@ Decisões atuais:
 - Suportar ambos os modos de autenticação (Authtoken vs Bearer) conforme caso de uso.
 - Janelas configuráveis por client via `policies.json` com prioridade clara.
 
-Próximos passos sugeridos:
+Próximos passos:
 - Unificar autenticação: avaliar migração total para Authtoken ou Bearer, documentando prós/contras.
 - Ativar TLS verificado por padrão (`verifyTLS: true`) e exigir CA bundle.
 - Centralizar configuração (arquivo único com perfil por ambiente).
